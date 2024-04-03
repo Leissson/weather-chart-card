@@ -27,9 +27,11 @@
     "rollup-plugin-node-resolve": "^5.2.0",
     "rollup-plugin-serve": "^2.0.3"
   },
-  "optionalDependencies": {
-        "@rollup/rollup-linux-x64-gnu": "4.9.5"
-    },
+  "overrides": {
+  "vite": {
+    "rollup": "npm:@rollup/wasm-node"
+  }
+},
   "scripts": {
     "start": "rollup -c rollup.config.dev.js --watch",
     "build": "npm run lint && npm run rollup",
