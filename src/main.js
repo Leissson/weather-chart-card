@@ -631,7 +631,7 @@ drawChart({ config, language, weather, forecastItems } = this) {
         
                   var timeFormatOptions = {
                       hour12: config.use_12hour_format,
-                      hour: 'numeric',
+                      hour: '2-digit',
                       ...(config.use_12hour_format ? {} : { minute: 'numeric' }),
                   };
 
@@ -640,7 +640,8 @@ drawChart({ config, language, weather, forecastItems } = this) {
                   if (dateObj.getHours() === 0 && dateObj.getMinutes() === 0 && mode === 'hourly') {
                       var dateFormatOptions = {
                           day: 'numeric',
-                          month: 'short',
+                          month: 'numeric',
+						  weekday: 'short',
                       };
                       var date = dateObj.toLocaleDateString(language, dateFormatOptions);
                       time = time.replace('a.m.', 'AM').replace('p.m.', 'PM');
@@ -649,7 +650,7 @@ drawChart({ config, language, weather, forecastItems } = this) {
 
                   if (mode !== 'hourly') {
                       var weekday = dateObj.toLocaleString(language, { weekday: 'short' }).toUpperCase();
-                      return weekday;
+                      return [weekday, time];
                   }
 
                   time = time.replace('a.m.', 'AM').replace('p.m.', 'PM');
