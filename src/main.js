@@ -48,6 +48,7 @@ static getStubConfig(hass, unusedEntities, allEntities) {
     icons_size: 25,
     animated_icons: false,
     icon_style: 'style1',
+    autoscroll: false,
     forecast: {
       precipitation_type: 'rainfall',
       show_probability: false,
@@ -379,6 +380,10 @@ async firstUpdated(changedProperties) {
   this.measureCard();
   await new Promise(resolve => setTimeout(resolve, 0));
   this.drawChart();
+
+  if (this.config.autoscroll) {
+    this.autoscroll();
+  }
 }
 
 
@@ -390,6 +395,7 @@ async updated(changedProperties) {
 
     const entityChanged = oldConfig && this.config.entity !== oldConfig.entity;
     const forecastTypeChanged = oldConfig && this.config.forecast.type !== oldConfig.forecast.type;
+    const autoscrollChanged = oldConfig && this.config.autoscroll !== oldConfig.autoscroll;
 
     if (entityChanged || forecastTypeChanged) {
       if (this.forecastSubscriber && typeof this.forecastSubscriber === 'function') {
@@ -402,10 +408,48 @@ async updated(changedProperties) {
     if (this.forecasts && this.forecasts.length) {
       this.drawChart();
     }
+
+    if (autoscrollChanged) {
+      if (!this.config.autoscroll) {
+        this.autoscroll();
+      } else {
+        this.cancelAutoscroll();
+      }
+    }
   }
 
   if (changedProperties.has('weather')) {
     this.updateChart();
+  }
+}
+
+autoscroll() {
+  if (this.autoscrollTimeout) {
+    // Autscroll already set, nothing to do
+    return;
+  }
+
+  const updateChartOncePerHour = () => {
+    const now = new Date();
+    const nextHour = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        now.getHours()+1,
+    );
+    this.autoscrollTimeout = setTimeout(() => {
+      this.autoscrollTimeout = null;
+      this.updateChart();
+      drawChartOncePerHour();
+    }, nextHour - now);
+  };
+
+  updateChartOncePerHour();
+}
+
+cancelAutoscroll() {
+  if (this.autoscrollTimeout) {
+    clearTimeout(this.autoscrollTimeout);
   }
 }
 
@@ -430,43 +474,8 @@ drawChart({ config, language, weather, forecastItems } = this) {
   } else {
     var precipUnit = lengthUnit === 'km' ? this.ll('units')['mm'] : this.ll('units')['in'];
   }
-  var forecast = this.forecasts ? this.forecasts.slice(0, forecastItems) : [];
-  if (forecast.length >= 3) {
-    var date1 = new Date(forecast[1].datetime).toISOString().split('T')[0];
-    var date2 = new Date(forecast[2].datetime).toISOString().split('T')[0];
-    if (date1 !== date2) {
-      var mode = 'daily';
-    } else {
-      var mode = 'hourly';
-    }
-  } else {
-    console.log("Insufficient forecast data.");
-  }
-  var roundTemp = config.forecast.round_temp == true;
-  var i;
-  var dateTime = [];
-  var tempHigh = [];
-  var tempLow = [];
-  var precip = [];
-  for (i = 0; i < forecast.length; i++) {
-    var d = forecast[i];
-    dateTime.push(d.datetime);
-    tempHigh.push(d.temperature);
-    if (typeof d.templow !== 'undefined') {
-      tempLow.push(d.templow);
-    }
-    if (roundTemp) {
-      tempHigh[i] = Math.round(tempHigh[i]);
-      if (typeof d.templow !== 'undefined') {
-        tempLow[i] = Math.round(tempLow[i]);
-      }
-    }
-    if (config.forecast.precipitation_type === 'probability') {
-      precip.push(d.precipitation_probability);
-    } else {
-      precip.push(d.precipitation);
-    }
-  }
+  const data = this.computeForecastData();
+
   var style = getComputedStyle(document.body);
   var backgroundColor = style.getPropertyValue('--card-background-color');
   var textColor = style.getPropertyValue('--primary-text-color');
@@ -484,7 +493,7 @@ drawChart({ config, language, weather, forecastItems } = this) {
   if (config.forecast.precipitation_type === 'probability') {
     precipMax = 100;
   } else {
-    if (mode === 'hourly') {
+    if (config.forecast.type === 'hourly') {
       precipMax = lengthUnit === 'km' ? 4 : 1;
     } else {
       precipMax = lengthUnit === 'km' ? 20 : 1;
@@ -503,7 +512,7 @@ drawChart({ config, language, weather, forecastItems } = this) {
     {
       label: this.ll('tempHi'),
       type: 'line',
-      data: tempHigh,
+      data: data.tempHigh,
       yAxisID: 'TempAxis',
       borderColor: config.forecast.temperature1_color,
       backgroundColor: config.forecast.temperature1_color,
@@ -511,7 +520,7 @@ drawChart({ config, language, weather, forecastItems } = this) {
     {
       label: this.ll('tempLo'),
       type: 'line',
-      data: tempLow,
+      data: data.tempLow,
       yAxisID: 'TempAxis',
       borderColor: config.forecast.temperature2_color,
       backgroundColor: config.forecast.temperature2_color,
@@ -519,7 +528,7 @@ drawChart({ config, language, weather, forecastItems } = this) {
     {
       label: this.ll('precip'),
       type: 'bar',
-      data: precip,
+      data: data.precip,
       yAxisID: 'PrecipAxis',
       borderColor: config.forecast.precipitation_color,
       backgroundColor: config.forecast.precipitation_color,
@@ -533,7 +542,7 @@ drawChart({ config, language, weather, forecastItems } = this) {
         const precipitationType = config.forecast.precipitation_type;
 
         const rainfall = context.dataset.data[context.dataIndex];
-        const probability = forecast[context.dataIndex].precipitation_probability;
+        const probability = data.forecast[context.dataIndex].precipitation_probability;
 
         let formattedValue;
         if (precipitationType === 'rainfall') {
@@ -559,6 +568,8 @@ drawChart({ config, language, weather, forecastItems } = this) {
     },
   ];
 
+  const chart_text_color = (config.forecast.chart_text_color === 'auto') ? textColor : config.forecast.chart_text_color;
+
   if (config.forecast.style === 'style2') {
     datasets[0].datalabels = {
       display: function (context) {
@@ -571,7 +582,7 @@ drawChart({ config, language, weather, forecastItems } = this) {
       anchor: 'center',
       backgroundColor: 'transparent',
       borderColor: 'transparent',
-      color: config.forecast.chart_text_color || config.forecast.temperature1_color,
+      color: chart_text_color || config.forecast.temperature1_color,
       font: {
         size: parseInt(config.forecast.labels_font_size) + 1,
         lineHeight: 0.7,
@@ -589,7 +600,7 @@ drawChart({ config, language, weather, forecastItems } = this) {
       anchor: 'center',
       backgroundColor: 'transparent',
       borderColor: 'transparent',
-      color: config.forecast.chart_text_color || config.forecast.temperature2_color,
+      color: chart_text_color || config.forecast.temperature2_color,
       font: {
         size: parseInt(config.forecast.labels_font_size) + 1,
         lineHeight: 0.7,
@@ -600,7 +611,7 @@ drawChart({ config, language, weather, forecastItems } = this) {
   this.forecastChart = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: dateTime,
+      labels: data.dateTime,
       datasets: datasets,
     },
     options: {
@@ -637,7 +648,7 @@ drawChart({ config, language, weather, forecastItems } = this) {
 
                   var time = dateObj.toLocaleTimeString(language, timeFormatOptions);
 
-                  if (dateObj.getHours() === 0 && dateObj.getMinutes() === 0 && mode === 'hourly') {
+                  if (dateObj.getHours() === 0 && dateObj.getMinutes() === 0 && config.forecast.type === 'hourly') {
                       var dateFormatOptions = {
                           day: 'numeric',
                           month: 'numeric',
@@ -648,7 +659,7 @@ drawChart({ config, language, weather, forecastItems } = this) {
                       return [date, time];
                   }
 
-                  if (mode !== 'hourly') {
+                  if (config.forecast.type !== 'hourly') {
                       var weekday = dateObj.toLocaleString(language, { weekday: 'short' }).toUpperCase();
                       return [weekday, time];
                   }
@@ -661,8 +672,8 @@ drawChart({ config, language, weather, forecastItems } = this) {
         TempAxis: {
           position: 'left',
           beginAtZero: false,
-          suggestedMin: Math.min(...tempHigh, ...tempLow) - 5,
-          suggestedMax: Math.max(...tempHigh, ...tempLow) + 3,
+          suggestedMin: Math.min(...data.tempHigh, ...data.tempLow) - 5,
+          suggestedMax: Math.max(...data.tempHigh, ...data.tempLow) + 3,
           grid: {
             display: false,
             drawTicks: false,
@@ -693,7 +704,7 @@ drawChart({ config, language, weather, forecastItems } = this) {
           borderRadius: 0,
           borderWidth: 1.5,
           padding: config.forecast.precipitation_type === 'rainfall' && config.forecast.show_probability && config.forecast.type !== 'hourly' ? 3 : 4,
-          color: config.forecast.chart_text_color || textColor,
+          color: chart_text_color || textColor,
           font: {
             size: config.forecast.labels_font_size,
             lineHeight: 0.7,
@@ -720,7 +731,7 @@ drawChart({ config, language, weather, forecastItems } = this) {
     label: function (context) {
       var label = context.dataset.label;
       var value = context.formattedValue;
-      var probability = forecast[context.dataIndex].precipitation_probability;
+      var probability = data.forecast[context.dataIndex].precipitation_probability;
       var unit = context.datasetIndex === 2 ? precipUnit : tempUnit;
 
       if (config.forecast.precipitation_type === 'rainfall' && context.datasetIndex === 2 && config.forecast.show_probability && probability !== undefined && probability !== null) {
@@ -736,11 +747,7 @@ drawChart({ config, language, weather, forecastItems } = this) {
   });
 }
 
-updateChart({ config, language, weather, forecastItems } = this) {
-  if (!this.forecasts || !this.forecasts.length) {
-    return [];
-  }
-
+computeForecastData({ config, forecastItems } = this) {
   var forecast = this.forecasts ? this.forecasts.slice(0, forecastItems) : [];
   var roundTemp = config.forecast.round_temp == true;
   var dateTime = [];
@@ -750,6 +757,12 @@ updateChart({ config, language, weather, forecastItems } = this) {
 
   for (var i = 0; i < forecast.length; i++) {
     var d = forecast[i];
+    if (config.autoscroll) {
+      const cutoff = (config.forecast.type === 'hourly' ? 1 : 24) * 60 * 60 * 1000;
+      if (new Date() - new Date(d.datetime) > cutoff) {
+        continue;
+      }
+    }
     dateTime.push(d.datetime);
     tempHigh.push(d.temperature);
     if (typeof d.templow !== 'undefined') {
@@ -769,12 +782,28 @@ updateChart({ config, language, weather, forecastItems } = this) {
     }
   }
 
-  if (this.forecastChart) {
-    this.forecastChart.data.labels = dateTime;
-    this.forecastChart.data.datasets[0].data = tempHigh;
-    this.forecastChart.data.datasets[1].data = tempLow;
-    this.forecastChart.data.datasets[2].data = precip;
-    this.forecastChart.update();
+  return {
+    forecast,
+    dateTime,
+    tempHigh,
+    tempLow,
+    precip,
+  }
+}
+
+updateChart({ forecasts, forecastChart } = this) {
+  if (!forecasts || !forecasts.length) {
+    return [];
+  }
+
+  const data = this.computeForecastData();
+
+  if (forecastChart) {
+    forecastChart.data.labels = data.dateTime;
+    forecastChart.data.datasets[0].data = data.tempHigh;
+    forecastChart.data.datasets[1].data = data.tempLow;
+    forecastChart.data.datasets[2].data = data.precip;
+    forecastChart.update();
   }
 }
 
