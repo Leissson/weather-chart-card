@@ -14,24 +14,23 @@
   "repository": "git@github.com:mlamberts78/weather-chart-card.git",
   "author": "Marc Lamberts",
   "license": "MIT",
- "dependencies": {
-    "lit": "^2.0.2",
-    "chart.js": "3.9.1",
-    "chartjs-plugin-datalabels": "^2.0.0",
-    "chartjs-plugin-annotation": "2.2.1"
+  "dependencies": {
+    "chart.js": "^4.4.1",
+    "chartjs-plugin-datalabels": "^2.2.0",
+    "lit": "^2.8.0",
+    "relative-time": "^1.0.0"
   },
   "devDependencies": {
-    "eslint": "^5.16.0",
-    "acorn": "^8.4.1",
-    "rollup": "^2.33.1",
+    "eslint": "^8.56.0",
+    "rollup": "^4.9.6",
+    "rollup-plugin-copy": "^3.5.0",
     "rollup-plugin-node-resolve": "^5.2.0",
-    "rollup-plugin-serve": "^1.1.0",
-    "rollup-plugin-copy": "^3.5.0"
+    "rollup-plugin-serve": "^2.0.3"
   },
   "scripts": {
-    "start": "rollup -c rollup.config.mjs --watch",
+    "start": "rollup -c rollup.config.dev.js --watch",
     "build": "npm run lint && npm run rollup",
-    "lint": "eslint src/* --ext .js",
+    "lint": "eslint 'src/**/*.js'",
     "rollup": "rollup -c"
   }
 }
