@@ -29,7 +29,8 @@
     "rollup-plugin-copy": "^3.5.0"
   },
   "optionalDependencies": {
-    "@rollup/rollup-linux-x64-gnu": "4.9.5"
+    "@rollup/rollup-linux-x64-gnu": "4.9.5",
+    "@rollup/rollup-linux-arm-gnueabihf": "4.30.1"
   },
   "scripts": {
     "start": "rollup -c rollup.config.mjs --watch",
